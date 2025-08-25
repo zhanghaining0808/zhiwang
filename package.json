@@ -1,0 +1,19 @@
+{
+  "name": "zhiwang",
+  "version": "1.0.0",
+  "main": "get-single-journal.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "single": "node get-single-journal.js",
+    "batch": "node run-batch.js",
+    "start": "node run-batch.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "playwright": "^1.55.0",
+    "user-agents": "^1.1.642",
+    "xlsx": "^0.18.5"
+  }
+}
