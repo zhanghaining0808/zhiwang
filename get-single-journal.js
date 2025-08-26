@@ -26,25 +26,36 @@ class SingleJournalTester {
         try {
             console.log('正在初始化浏览器...');
 
+            // 使用增强的浏览器配置
             this.browser = await chromium.launch({
-                headless: false, // 可视化模式，方便观察
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage'
-                ]
+                headless: config.ANTI_DETECTION.BROWSER_CONFIG.headless,
+                args: config.ANTI_DETECTION.BROWSER_CONFIG.args
             });
 
-            this.context = await this.browser.newContext({
-                viewport: { width: 1366, height: 768 },
+            // 使用增强的上下文配置
+            const contextOptions = {
+                ...config.ANTI_DETECTION.BROWSER_CONFIG.contextOptions,
+                viewport: config.ANTI_DETECTION.BROWSER_CONFIG.viewport,
                 userAgent: config.ANTI_DETECTION.BROWSER_CONFIG.userAgent
-            });
+            };
 
+            this.context = await this.browser.newContext(contextOptions);
+
+            // 配置反检测
             await this.antiDetection.configureBrowser(this.browser, this.context);
+
+            // 创建主页面
             this.page = await this.context.newPage();
+
+            // 注入反检测脚本
             await this.antiDetection.injectAntiDetectionScripts(this.page);
 
-            console.log('浏览器初始化完成');
+            // 设置网络请求拦截（如果启用）
+            if (config.ANTI_DETECTION.ADVANCED_OPTIONS.ENABLE_NETWORK_INTERCEPTION) {
+                await this.antiDetection.setupNetworkInterception(this.page);
+            }
+
+            console.log('浏览器初始化完成 - 已启用高级反检测功能');
             return true;
         } catch (error) {
             console.error('浏览器初始化失败:', error);

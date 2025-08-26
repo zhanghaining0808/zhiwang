@@ -49,25 +49,41 @@ class BatchCrawler {
         try {
             console.log('正在初始化浏览器...');
 
+            // 使用更高级的浏览器配置
             this.browser = await chromium.launch({
-                headless: false,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage'
-                ]
+                headless: config.ANTI_DETECTION.BROWSER_CONFIG.headless,
+                args: config.ANTI_DETECTION.BROWSER_CONFIG.args
             });
 
-            this.context = await this.browser.newContext({
-                viewport: { width: 1366, height: 768 },
+            // 使用增强的上下文配置
+            const contextOptions = {
+                ...config.ANTI_DETECTION.BROWSER_CONFIG.contextOptions,
+                viewport: config.ANTI_DETECTION.BROWSER_CONFIG.viewport,
                 userAgent: config.ANTI_DETECTION.BROWSER_CONFIG.userAgent
-            });
+            };
 
+            this.context = await this.browser.newContext(contextOptions);
+
+            // 配置反检测
             await this.antiDetection.configureBrowser(this.browser, this.context);
+
+            // 创建主页面
             this.page = await this.context.newPage();
+
+            // 注入反检测脚本
             await this.antiDetection.injectAntiDetectionScripts(this.page);
 
-            console.log('浏览器初始化完成');
+            // 设置网络请求拦截（如果启用）
+            if (config.ANTI_DETECTION.ADVANCED_OPTIONS.ENABLE_NETWORK_INTERCEPTION) {
+                await this.antiDetection.setupNetworkInterception(this.page);
+            }
+
+            // 模拟后台标签页（如果启用）
+            if (config.ANTI_DETECTION.ADVANCED_OPTIONS.ENABLE_BACKGROUND_TABS) {
+                await this.antiDetection.simulateTabBehavior(this.context);
+            }
+
+            console.log('浏览器初始化完成 - 已启用高级反检测功能');
             return true;
         } catch (error) {
             console.error('浏览器初始化失败:', error);
@@ -88,6 +104,12 @@ class BatchCrawler {
             });
 
             await this.antiDetection.waitForPageLoad(this.page);
+
+            // 模拟人类行为，增加真实性
+            if (config.ANTI_DETECTION.ADVANCED_OPTIONS.BEHAVIOR_SIMULATION_LEVEL === 'high') {
+                await this.antiDetection.simulateHumanBehavior(this.page);
+            }
+
             await this.randomDelay(2000, 4000);
 
             // 查找搜索输入框
@@ -117,22 +139,36 @@ class BatchCrawler {
             // 选择搜索类型（CN）
             try {
                 await this.page.selectOption('select[name="txt_1_sel"]', 'CN');
+                await this.randomDelay(300, 600);
             } catch (e) {
                 console.log('搜索类型选择失败，继续执行');
             }
 
-            // 输入搜索关键词
-            await inputElement.fill('');
-            await this.randomDelay(500, 1000);
-            await inputElement.fill(searchCode);
-            console.log(`已输入搜索关键词: ${searchCode}`);
-            await this.randomDelay(1000, 2000);
+            // 使用人类化打字输入搜索关键词
+            const inputSelector = inputSelectors.find(async selector => {
+                try {
+                    const el = await this.page.$(selector);
+                    return el && await el.isVisible();
+                } catch {
+                    return false;
+                }
+            }) || inputSelectors[0];
 
-            // 执行搜索
+            await this.antiDetection.humanizedTyping(this.page, inputSelector, searchCode);
+            console.log(`已输入搜索关键词: ${searchCode}`);
+
+            // 模拟人类的提交行为
+            await this.randomDelay(1000, 2000);
             await this.page.keyboard.press('Enter');
             console.log('已执行搜索');
 
             await this.antiDetection.waitForPageLoad(this.page);
+
+            // 搜索后的人类行为模拟
+            if (config.ANTI_DETECTION.ADVANCED_OPTIONS.BEHAVIOR_SIMULATION_LEVEL !== 'low') {
+                await this.antiDetection.simulateScrolling(this.page);
+            }
+
             await this.randomDelay(3000, 5000);
 
             return true;
@@ -691,74 +727,146 @@ class BatchCrawler {
             // 等待页面稳定
             await this.page.waitForTimeout(2000);
 
-            const nextSelectors = [
-                '.pagenav .next',               // 标准下一页按钮
-                'a.next',                       // 类名为next的链接
-                '.next',                        // 任何next类
-                'a:has-text("下一页")',        // 包含“下一页”文本的链接
-                'a:has-text("下页")',          // 包含“下页”文本的链接  
-                'a[title*="下一页"]',        // title属性包含下一页
-                '.pagenav a:last-child',        // 翻页导航的最后一个链接
-                '.page-next',                   // 可能的翻页类名
-                'a[onclick*="next"]',          // 包含next的onclick事件
-                '.pagination .next',            // Bootstrap样式的翻页
-                '.paging .next'                 // 其他可能的翻页样式
-            ];
+            // 首先尝试数字页码链接（通常更可靠）
+            console.log('尝试数字页码链接翻页...');
 
-            for (let i = 0; i < nextSelectors.length; i++) {
-                const selector = nextSelectors[i];
-                console.log(`尝试选择器 ${i + 1}/${nextSelectors.length}: ${selector}`);
+            // 获取当前页码
+            const currentPageNum = await this.page.evaluate(() => {
+                const activeElement = document.querySelector('.pagenav .active, .pagenav span.active');
+                return activeElement ? parseInt(activeElement.textContent.trim()) : 1;
+            }).catch(() => 1);
 
-                try {
-                    const nextButton = await this.page.$(selector);
-                    if (nextButton) {
-                        const isVisible = await nextButton.isVisible();
-                        const isEnabled = await nextButton.isEnabled();
-                        const buttonText = await nextButton.textContent().catch(() => '');
-                        const href = await nextButton.getAttribute('href').catch(() => '');
+            const nextPageNum = currentPageNum + 1;
+            console.log(`当前页码: ${currentPageNum}, 寻找下一页: ${nextPageNum}`);
 
-                        console.log(`  找到按钮: 可见=${isVisible}, 启用=${isEnabled}, 文本="${buttonText}", 链接="${href}"`);
+            // 查找下一页的数字链接
+            const nextPageLink = await this.page.$(`a[data-page="${nextPageNum}"]`);
+            if (nextPageLink) {
+                const isVisible = await nextPageLink.isVisible();
+                const isEnabled = await nextPageLink.isEnabled();
 
-                        if (isVisible && isEnabled) {
-                            console.log(`  点击下一页按钮: ${selector}`);
-                            await nextButton.click();
-                            console.log('  等待页面加载...');
-                            await this.antiDetection.waitForPageLoad(this.page);
-                            await this.randomDelay(...this.delayBetweenPages);
-                            console.log('  ✓ 翻页成功');
-                            return true;
-                        } else {
-                            console.log(`  × 按钮不可用或不可见`);
-                        }
+                console.log(`找到下一页链接: 页码=${nextPageNum}, 可见=${isVisible}, 启用=${isEnabled}`);
+
+                if (isVisible && isEnabled) {
+                    await nextPageLink.click();
+                    console.log('已点击数字页码链接，等待翻页...');
+
+                    // 等待足够的时间让JavaScript执行
+                    await this.page.waitForTimeout(5000); // 增加等待时间
+
+                    // 简单验证：检查当前激活的页码是否变了
+                    const newPageNum = await this.page.evaluate(() => {
+                        const activeElement = document.querySelector('.pagenav .active, .pagenav span.active');
+                        return activeElement ? parseInt(activeElement.textContent.trim()) : 1;
+                    }).catch(() => 1);
+
+                    console.log(`翻页后页码: ${newPageNum}`);
+
+                    if (newPageNum > currentPageNum) {
+                        console.log('✓ 数字页码翻页成功');
+                        await this.randomDelay(...this.delayBetweenPages);
+                        return true;
                     } else {
-                        console.log(`  × 未找到按钮`);
+                        console.log('× 页码没有变化，翻页失败');
                     }
-                } catch (e) {
-                    console.log(`  × 选择器失败: ${e.message}`);
-                    continue;
                 }
+            } else {
+                console.log(`未找到页码 ${nextPageNum} 的链接`);
             }
 
-            // 如果所有选择器都失败，尝试查找数字页码链接
-            console.log('尝试查找数字页码链接...');
-            try {
-                const pageLinks = await this.page.$$('.pagenav a, .pagination a, .paging a');
-                console.log(`找到 ${pageLinks.length} 个页码链接`);
+            // 如果数字页码失败，尝试下一页按钮
+            console.log('尝试下一页按钮...');
 
-                for (let i = 0; i < pageLinks.length; i++) {
-                    const link = pageLinks[i];
-                    const linkText = await link.textContent().catch(() => '');
-                    const href = await link.getAttribute('href').catch(() => '');
-                    console.log(`  页码链接 ${i + 1}: 文本="${linkText}", 链接="${href}"`);
+            const nextButton = await this.page.$('.pagenav .next');
+            if (nextButton) {
+                const isVisible = await nextButton.isVisible();
+                const isEnabled = await nextButton.isEnabled();
+                const buttonText = await nextButton.textContent().catch(() => '');
 
-                    // 尝试找数字页码（如果存在）
-                    if (/^\d+$/.test(linkText.trim())) {
-                        const pageNum = parseInt(linkText.trim());
-                        console.log(`  发现数字页码: ${pageNum}`);
+                console.log(`找到下一页按钮: 可见=${isVisible}, 启用=${isEnabled}, 文本="${buttonText}"`);
+
+                if (isVisible && isEnabled) {
+                    await nextButton.click();
+                    console.log('已点击下一页按钮，等待翻页...');
+
+                    // 等待足够时间让JavaScript执行
+                    await this.page.waitForTimeout(5000);
+
+                    // 验证翻页
+                    const newPageNum = await this.page.evaluate(() => {
+                        const activeElement = document.querySelector('.pagenav .active, .pagenav span.active');
+                        return activeElement ? parseInt(activeElement.textContent.trim()) : 1;
+                    }).catch(() => 1);
+
+                    console.log(`翻页后页码: ${newPageNum}`);
+
+                    if (newPageNum > currentPageNum) {
+                        console.log('✓ 下一页按钮翻页成功');
+                        await this.randomDelay(...this.delayBetweenPages);
+                        return true;
+                    } else {
+                        console.log('× 下一页按钮翻页失败');
                     }
                 }
-            } catch (e) {
-                console.log(`查找数字页码失败: ${e.message}`);
+            } else {
+                console.log('未找到下一页按钮');
+            }
+
+            // 如果上面的方法都失败，尝试底部的翻页按钮
+            console.log('尝试底部翻页按钮...');
+
+            const bottomNextButton = await this.page.$('.pageCheck .butR');
+            if (bottomNextButton) {
+                const isVisible = await bottomNextButton.isVisible();
+                const onclick = await bottomNextButton.getAttribute('onclick').catch(() => '');
+
+                console.log(`找到底部翻页按钮: 可见=${isVisible}, onclick="${onclick}"`);
+
+                if (isVisible && onclick.includes('Submit.pageTopTurn')) {
+                    console.log('底部翻页按钮使用Submit.pageTopTurn方法');
+
+                    // 记录翻页前的页码信息
+                    const beforePageInfo = await this.page.evaluate(() => {
+                        const currentPageElement = document.querySelector('#txtPageGoToBottom, .pageCheck em:first-of-type');
+                        return currentPageElement ? parseInt(currentPageElement.textContent.trim()) : 1;
+                    }).catch(() => 1);
+
+                    console.log(`底部显示当前页码: ${beforePageInfo}`);
+
+                    await bottomNextButton.click();
+                    console.log('已点击底部翻页按钮，等待翻页...');
+
+                    // 等待Submit.pageTopTurn方法执行
+                    await this.page.waitForTimeout(5000);
+
+                    // 验证底部页码是否发生变化
+                    const afterPageInfo = await this.page.evaluate(() => {
+                        const currentPageElement = document.querySelector('#txtPageGoToBottom, .pageCheck em:first-of-type');
+                        return currentPageElement ? parseInt(currentPageElement.textContent.trim()) : 1;
+                    }).catch(() => 1);
+
+                    console.log(`底部翻页后页码: ${afterPageInfo}`);
+
+                    // 同时验证主翻页区域的页码变化
+                    const mainPageNum = await this.page.evaluate(() => {
+                        const activeElement = document.querySelector('.pagenav .active, .pagenav span.active');
+                        return activeElement ? parseInt(activeElement.textContent.trim()) : 1;
+                    }).catch(() => 1);
+
+                    console.log(`主翻页区域页码: ${mainPageNum}`);
+
+                    if (afterPageInfo > beforePageInfo || mainPageNum > currentPageNum) {
+                        console.log('✓ 底部翻页按钮翻页成功');
+                        await this.randomDelay(...this.delayBetweenPages);
+                        return true;
+                    } else {
+                        console.log('× 底部翻页按钮翻页失败');
+                    }
+                } else {
+                    console.log('底部翻页按钮不可用或onclick方法不正确');
+                }
+            } else {
+                console.log('未找到底部翻页按钮');
             }
 
             console.log('× 所有翻页尝试都失败，可能已到达最后一页');

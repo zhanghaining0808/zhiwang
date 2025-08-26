@@ -56,11 +56,59 @@ const config = {
             MAX: 3000
         },
 
+        // 高级反检测选项
+        ADVANCED_OPTIONS: {
+            // 是否启用网络请求拦截
+            ENABLE_NETWORK_INTERCEPTION: true,
+            // 是否模拟后台标签页
+            ENABLE_BACKGROUND_TABS: true,
+            // 是否使用真实的浏览器指纹
+            USE_REAL_FINGERPRINTS: true,
+            // 人类行为模拟强度 (low, medium, high)
+            BEHAVIOR_SIMULATION_LEVEL: 'high',
+            // 是否启用Canvas指纹伪装
+            ENABLE_CANVAS_SPOOFING: true
+        },
+
         // 浏览器配置
         BROWSER_CONFIG: {
             headless: false, // 非无头模式，更难被检测
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-blink-features=AutomationControlled',
+                '--exclude-switches=enable-automation',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-default-apps',
+                '--disable-popup-blocking',
+                '--disable-translate',
+                '--disable-background-timer-throttling',
+                '--disable-renderer-backgrounding',
+                '--disable-device-discovery-notifications',
+                '--disable-ipc-flooding-protection'
+            ],
             viewport: { width: 1366, height: 768 },
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            // 额外的上下文选项
+            contextOptions: {
+                ignoreHTTPSErrors: true,
+                bypassCSP: true,
+                locale: 'zh-CN',
+                timezoneId: 'Asia/Shanghai',
+                permissions: ['geolocation'],
+                geolocation: { latitude: 39.9042, longitude: 116.4074 }, // 北京
+                colorScheme: 'light',
+                reducedMotion: 'no-preference',
+                forcedColors: 'none',
+                screen: {
+                    width: 1920,
+                    height: 1080
+                }
+            }
         }
     },
 

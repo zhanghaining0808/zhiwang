@@ -47,7 +47,7 @@ const USER_CONFIG = {
 
     // 爬取页面数配置
     maxPages: 0,              // 全局最大页面数，0 = 无限制，爬到底；设置数字如100表示最多爬100页
-    maxPagesPerCode: 10,      // 每个搜索编码最大页面数（测试用，降低为10页）
+    maxPagesPerCode: 500,      // 每个搜索编码最大页面数（测试用，降低为10页）
 
     // 延时配置（毫秒）
     delayBetweenPages: [3000, 6000],   // 页面间随机延时范围
